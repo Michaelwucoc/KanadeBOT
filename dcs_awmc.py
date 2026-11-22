@@ -203,14 +203,19 @@ class AwmcBridge:
     def _origin(self) -> str:
         try:
             url = urlsplit(self.url)
-            if (url.scheme == 'https' and url.hostname and not url.username and not url.password
+            loopback = (url.hostname or '').lower() in {'127.0.0.1', 'localhost', '::1'}
+            secure = url.scheme == 'https'
+            # Plain HTTP is only for a local SSH tunnel; never send the bridge
+            # secret or a score QR over public HTTP.
+            local_tunnel = url.scheme == 'http' and loopback
+            if ((secure or local_tunnel) and url.hostname and not url.username and not url.password
                     and not url.query and not url.fragment and url.port != 0
                     and url.path in ('', BRIDGE_PATH, BRIDGE_PATH.removesuffix('/kanade'))
                     and len(self._secret) >= 32):
-                return f'https://{url.netloc}'
+                return f'{url.scheme}://{url.netloc}'
         except ValueError:
             pass
-        raise BridgeError('configuration', 'AWMC Bridge 尚未配置，请联系 KanadeBot 管理员。')
+        raise BridgeError('configuration', 'AWMC Bridge 需要 HTTPS；本机 SSH 隧道可用 127.0.0.1 的 HTTP。')
 
     async def request(self, method: str, qq: str, endpoint: str, payload: dict | None = None) -> dict:
         import aiohttp
