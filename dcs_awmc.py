@@ -191,9 +191,10 @@ def format_progress(result: dict) -> str:
 
 
 class AwmcBridge:
-    def __init__(self, url: str, secret: str):
+    def __init__(self, url: str, secret: str, *, allow_insecure_http: bool = False):
         self.url = url.strip().rstrip('/')
         self._secret = secret.strip()
+        self._allow_insecure_http = bool(allow_insecure_http)
         self._session = None
 
     @property
@@ -205,10 +206,10 @@ class AwmcBridge:
             url = urlsplit(self.url)
             loopback = (url.hostname or '').lower() in {'127.0.0.1', 'localhost', '::1'}
             secure = url.scheme == 'https'
-            # Plain HTTP is only for a local SSH tunnel; never send the bridge
-            # secret or a score QR over public HTTP.
-            local_tunnel = url.scheme == 'http' and loopback
-            if ((secure or local_tunnel) and url.hostname and not url.username and not url.password
+            # HTTP is explicit opt-in for an SSH tunnel or a trusted direct
+            # origin. Prefer HTTPS: a score QR is a live account credential.
+            insecure = url.scheme == 'http' and (loopback or self._allow_insecure_http)
+            if ((secure or insecure) and url.hostname and not url.username and not url.password
                     and not url.query and not url.fragment and url.port != 0
                     and url.path in ('', BRIDGE_PATH, BRIDGE_PATH.removesuffix('/kanade'))
                     and len(self._secret) >= 32):
